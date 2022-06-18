@@ -31,7 +31,7 @@ public class EvController : ControllerBase
             var otp = (string)await _smsApi.SendApi(result.FirstOrDefault().MobileNumber.ToString());
             if(otp?.Length<4||otp?.Length>4)
                 return Problem("Unable to send OTP..contact support");
-            await UpdateUserRecord(model.UniqueVehicleNumber, result, otp);
+            await UpdateUserRecord(model.UniqueVehicleNumber, result.FirstOrDefault(), otp);
             return Ok(otp);
         }
         catch (Exception e)
@@ -41,24 +41,24 @@ public class EvController : ControllerBase
         
     }
 
-    private async Task UpdateUserRecord(string vehicleNumber, List<dynamic> result, string? otp)
+    private async Task UpdateUserRecord(string vehicleNumber, dynamic result, string? otp="")
     {
         var itemtobeUpdated = new
         {
-            OwnerName = result.FirstOrDefault().OwnerName.ToString(),
-            VehicleNumber = result.FirstOrDefault().VehicleNumber.ToString(),
-            MakeModel = result.FirstOrDefault().MakeModel.ToString(),
-            CurrentRange = result.FirstOrDefault().CurrentRange.ToString(),
-            BatteryHealth = result.FirstOrDefault().BatteryHealth.ToString(),
-            MobileNumber = result.FirstOrDefault().MobileNumber.ToString(),
-            UUID = result.FirstOrDefault().UUID.ToString(),
-            TotalOdometer = result.FirstOrDefault().TotalOdometer.ToString(),
+            OwnerName = result.OwnerName.ToString(),
+            VehicleNumber = result.VehicleNumber.ToString(),
+            MakeModel = result.MakeModel.ToString(),
+            CurrentRange = result.CurrentRange.ToString(),
+            BatteryHealth = result.BatteryHealth.ToString(),
+            MobileNumber = result.MobileNumber.ToString(),
+            UUID = result.UUID.ToString(),
+            TotalOdometer = result.TotalOdometer.ToString(),
             TempOtp = otp,
-            id = result.FirstOrDefault().VehicleNumber.ToString()
+            id = result.VehicleNumber.ToString()
         };
-        result.FirstOrDefault().TempOtp = otp;
+        result.TempOtp = otp;
         var updateQuery = "SELECT* FROM c where c.VehicleNumber = '" + vehicleNumber + "'";
-        await _cosmosDbService.UpdateAsyncv2(result.FirstOrDefault().VehicleNumber.ToString(), itemtobeUpdated,
+        await _cosmosDbService.UpdateAsyncv2(result.VehicleNumber.ToString(), itemtobeUpdated,
             _configuration.GetSection("ConnectionStrings").GetSection("EvUserContainer").Value, updateQuery);
     }
 
@@ -73,7 +73,7 @@ public class EvController : ControllerBase
                 return NotFound("No vehicle details exist");
             if (result.FirstOrDefault().TempOtp == model.VerificationOtp)
             {
-                await UpdateUserRecord(model.VehicleNumber, result, "");
+                await UpdateUserRecord(model.VehicleNumber, result.FirstOrDefault(), "");
                 return Ok(new UserDetails
                 {
                     OwnerName = result.FirstOrDefault().OwnerName,
@@ -97,13 +97,17 @@ public class EvController : ControllerBase
         }
     }
     
-    [HttpPost, ActionName("UpdatevehicleCharge")]
+    [HttpPost, ActionName("UpdateVehicleCharge")]
     public async Task<IActionResult> UpdateCharge([FromBody] UserVehicleHistory model)
     {
         try
         {
             model.id = Guid.NewGuid().ToString();
+            var query = "SELECT* FROM c where c.VehicleNumber = '" + model.VehicleNumber + "'";
+            var result = await _cosmosDbService.GetMultipleAsync(query, _configuration.GetSection("ConnectionStrings").GetSection("EvUserContainer").Value);
             await _cosmosDbService.AddAsync(model.id,model,_configuration.GetSection("ConnectionStrings").GetSection("EvUserHistoryContainer").Value);
+            result.FirstOrDefault().CurrentRange = model.LastCharge.ToString();
+            await UpdateUserRecord(model.VehicleNumber, result.FirstOrDefault());
             return Ok("Updated Charge successfully");
 
         }
