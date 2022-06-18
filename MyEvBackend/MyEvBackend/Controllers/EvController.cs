@@ -2,8 +2,7 @@
 using Microsoft.AspNetCore.Mvc;
 namespace MyEvBackend.Controllers;
 
-[ApiController]
-[Route("[controller]")]
+[Route("api/[controller]/[action]")]
 public class EvController : ControllerBase
 {
    
@@ -20,8 +19,7 @@ public class EvController : ControllerBase
         _smsApi = smsapi;
     }
 
-    [HttpPost(Name = "AuthenticateUser")]
-    [AllowAnonymous]
+    [HttpPost, ActionName("AuthenticateVehicle")]
     public async Task<IActionResult> AuthenticateRequest([FromBody] LoginRequest model)
     {
         try
@@ -54,6 +52,7 @@ public class EvController : ControllerBase
             BatteryHealth = result.FirstOrDefault().BatteryHealth.ToString(),
             MobileNumber = result.FirstOrDefault().MobileNumber.ToString(),
             UUID = result.FirstOrDefault().UUID.ToString(),
+            TotalOdometer = result.FirstOrDefault().TotalOdometer.ToString(),
             TempOtp = otp,
             id = result.FirstOrDefault().VehicleNumber.ToString()
         };
@@ -63,8 +62,7 @@ public class EvController : ControllerBase
             _configuration.GetSection("ConnectionStrings").GetSection("EvUserContainer").Value, updateQuery);
     }
 
-    [HttpPut(Name = "VerifyUser")]
-    [AllowAnonymous]
+    [HttpPost, ActionName("VerifyUser")]
     public async Task<IActionResult> VerifyOtp([FromBody] VerifyRequest model)
     {
         try
@@ -80,10 +78,11 @@ public class EvController : ControllerBase
                 {
                     OwnerName = result.FirstOrDefault().OwnerName,
                     VehicleNumber = result.FirstOrDefault().VehicleNumber,
-                    MakeModel = result.FirstOrDefault().VehicleNumber,
+                    MakeModel = result.FirstOrDefault().MakeModel,
                     CurrentRange = result.FirstOrDefault().CurrentRange,
                     BatteryHealth = result.FirstOrDefault().BatteryHealth,
-                    MobileNumber = result.FirstOrDefault().MobileNumber
+                    MobileNumber = result.FirstOrDefault().MobileNumber,
+                    TotalOdometer = result.FirstOrDefault().TotalOdometer
                 
                 });
             }
@@ -91,6 +90,54 @@ public class EvController : ControllerBase
             {
                 return Problem("Unable to verify OTP try again in 1 minute");
             }
+        }
+        catch (Exception e)
+        {
+            return Problem(e.Message);
+        }
+    }
+    
+    [HttpPost, ActionName("UpdatevehicleCharge")]
+    public async Task<IActionResult> UpdateCharge([FromBody] UserVehicleHistory model)
+    {
+        try
+        {
+            model.id = Guid.NewGuid().ToString();
+            await _cosmosDbService.AddAsync(model.id,model,_configuration.GetSection("ConnectionStrings").GetSection("EvUserHistoryContainer").Value);
+            return Ok("Updated Charge successfully");
+
+        }
+        catch (Exception e)
+        {
+            return Problem(e.Message);
+        }
+    }
+    
+    
+    [HttpGet(Name = "GetUserVehicleHistory")]
+    public async Task<IActionResult> GetUserVehicleHistory(string vehicleNumber)
+    {
+        try
+        {
+            var query = "SELECT* FROM c where c.VehicleNumber = '" + vehicleNumber + "'";
+            var result = await _cosmosDbService.GetMultipleAsync(query, _configuration.GetSection("ConnectionStrings").GetSection("EvUserHistoryContainer").Value);
+            if (result.Count == 0 || result is null)
+                return NotFound("No vehicle details exist");
+            var userHistory = new UserVehicleHistory();
+            var userHistoryList = new List<UserVehicleHistory>();
+            foreach (var item in result)
+            {
+                userHistory.VehicleNumber = item.VehicleNumber;
+                userHistory.LastCharge = item.LastCharge;
+                userHistory.LastServiceDate = item.LastServiceDate;
+                userHistory.PlaceOfCharge = item.PlaceOfCharge;
+                userHistory.PaymentReciept = item.PaymentReciept;
+                userHistory.PaymentAmount = item.PaymentAmount;
+                userHistory.ChargingStationName = item.ChargingStationName;
+                userHistoryList.Add(userHistory);
+            }
+
+            return Ok(userHistoryList);
         }
         catch (Exception e)
         {
