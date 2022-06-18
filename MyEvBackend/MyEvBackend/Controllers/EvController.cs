@@ -33,22 +33,7 @@ public class EvController : ControllerBase
             var otp = (string)await _smsApi.SendApi(result.FirstOrDefault().MobileNumber.ToString());
             if(otp?.Length<4||otp?.Length>4)
                 return Problem("Unable to send OTP..contact support");
-            var itemtobeUpdated = new
-            {
-                OwnerName = result.FirstOrDefault().OwnerName.ToString(),
-                VehicleNumber = result.FirstOrDefault().VehicleNumber.ToString(),
-                MakeModel = result.FirstOrDefault().MakeModel.ToString(),
-                CurrentRange = result.FirstOrDefault().CurrentRange.ToString(),
-                BatteryHealth = result.FirstOrDefault().BatteryHealth.ToString(),
-                MobileNumber = result.FirstOrDefault().MobileNumber.ToString(),
-                UUID = result.FirstOrDefault().UUID.ToString(),
-                TempOtp = otp,
-                id = result.FirstOrDefault().VehicleNumber.ToString()
-
-            };
-            result.FirstOrDefault().TempOtp = otp;
-            var updateQuery = "SELECT* FROM c where c.VehicleNumber = '" + model.UniqueVehicleNumber + "'";
-            await _cosmosDbService.UpdateAsyncv2(result.FirstOrDefault().VehicleNumber.ToString(), itemtobeUpdated, _configuration.GetSection("ConnectionStrings").GetSection("EvUserContainer").Value, updateQuery);
+            await UpdateUserRecord(model.UniqueVehicleNumber, result, otp);
             return Ok(otp);
         }
         catch (Exception e)
@@ -57,7 +42,27 @@ public class EvController : ControllerBase
         }
         
     }
-    
+
+    private async Task UpdateUserRecord(string vehicleNumber, List<dynamic> result, string? otp)
+    {
+        var itemtobeUpdated = new
+        {
+            OwnerName = result.FirstOrDefault().OwnerName.ToString(),
+            VehicleNumber = result.FirstOrDefault().VehicleNumber.ToString(),
+            MakeModel = result.FirstOrDefault().MakeModel.ToString(),
+            CurrentRange = result.FirstOrDefault().CurrentRange.ToString(),
+            BatteryHealth = result.FirstOrDefault().BatteryHealth.ToString(),
+            MobileNumber = result.FirstOrDefault().MobileNumber.ToString(),
+            UUID = result.FirstOrDefault().UUID.ToString(),
+            TempOtp = otp,
+            id = result.FirstOrDefault().VehicleNumber.ToString()
+        };
+        result.FirstOrDefault().TempOtp = otp;
+        var updateQuery = "SELECT* FROM c where c.VehicleNumber = '" + vehicleNumber + "'";
+        await _cosmosDbService.UpdateAsyncv2(result.FirstOrDefault().VehicleNumber.ToString(), itemtobeUpdated,
+            _configuration.GetSection("ConnectionStrings").GetSection("EvUserContainer").Value, updateQuery);
+    }
+
     [HttpPut(Name = "VerifyUser")]
     [AllowAnonymous]
     public async Task<IActionResult> VerifyOtp([FromBody] VerifyRequest model)
@@ -70,6 +75,7 @@ public class EvController : ControllerBase
                 return NotFound("No vehicle details exist");
             if (result.FirstOrDefault().TempOtp == model.VerificationOtp)
             {
+                await UpdateUserRecord(model.VehicleNumber, result, "");
                 return Ok(new UserDetails
                 {
                     OwnerName = result.FirstOrDefault().OwnerName,
