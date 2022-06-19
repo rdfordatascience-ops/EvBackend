@@ -12,15 +12,14 @@ public class SmsService:ISmsApi
     public async Task<string> SendApi(string phoneNumber)
     {
         var otptobeGenerated = await GenerateRandomOTP();
-        // var message = MessageResource.Create(
-        //     body: otptobeGenerated.ToString(),
-        //     from: new Twilio.Types.PhoneNumber("+17163338803"),
-        //     to: new Twilio.Types.PhoneNumber(phoneNumber)
-        // );
-        //
-        //
-        // return message.ErrorCode!=null?message.ErrorMessage:otptobeGenerated;
-        return otptobeGenerated;
+        var message = MessageResource.Create(
+            body: otptobeGenerated.ToString(),
+            from: new Twilio.Types.PhoneNumber("+17163338803"),
+            to: new Twilio.Types.PhoneNumber(phoneNumber)
+        );
+        
+        
+        return message.ErrorCode!=null?message.ErrorMessage:otptobeGenerated;
     }
     
     private async Task<string> GenerateRandomOTP()  
